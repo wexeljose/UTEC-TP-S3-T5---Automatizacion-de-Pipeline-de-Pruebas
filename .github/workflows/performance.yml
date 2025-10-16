@@ -1,0 +1,79 @@
+name: JMeter Performance Test with SLA
+
+# --------------------------------------------
+# Evento que dispara este workflow
+# --------------------------------------------
+on:
+  workflow_dispatch: # Permite ejecución manual desde GitHub Actions
+
+jobs:
+  performance:
+    runs-on: ubuntu-latest # Runner de GitHub
+
+    steps:
+      # ------------------------------------------------
+      # Clonar el repositorio
+      # ------------------------------------------------
+      - uses: actions/checkout@v4
+
+      # ------------------------------------------------
+      # Instalar JMeter
+      # ------------------------------------------------
+      - name: Setup JMeter
+        run: |
+          wget https://downloads.apache.org/jmeter/binaries/apache-jmeter-5.6.3.tgz
+          tar -xzf apache-jmeter-5.6.3.tgz
+          echo "JMETER_HOME=$(pwd)/apache-jmeter-5.6.3" >> $GITHUB_ENV
+
+      # ------------------------------------------------
+      # Ejecutar test plan de JMeter
+      # ------------------------------------------------
+      - name: Run Performance Test
+        run: |
+          mkdir -p results
+          $JMETER_HOME/bin/jmeter -n \
+            -t test-plans/api-performance.jmx \
+            -l results/results.jtl \
+            -e -o results/html-report \
+            -Jthreads=50 \
+            -Jrampup=120
+
+      # ------------------------------------------------
+      # Chequear umbrales de SLA
+      # ------------------------------------------------
+      - name: Check SLA Thresholds
+        run: |
+          RESULTS_FILE="results/results.jtl"
+          THRESHOLD_P95=500       # P95 en ms
+          THRESHOLD_ERROR_RATE=1  # Porcentaje
+
+          # Calcular P95
+          P95=$(awk -F',' 'NR>1 {times[NR-1]=$2} END { asort(times); idx=int((NR-1)*0.95); print times[idx] }' $RESULTS_FILE)
+
+          # Calcular error rate
+          ERROR_RATE=$(awk -F',' 'NR>1 {total++; if($8!="true") errors++} END {print (errors/total)*100}' $RESULTS_FILE)
+
+          echo "P95 response time: $P95 ms"
+          echo "Error rate: $ERROR_RATE %"
+
+          # Validar umbrales
+          if (( $(echo "$P95 > $THRESHOLD_P95" | bc -l) )); then
+            echo "❌ FAIL: P95 ($P95 ms) supera el umbral ($THRESHOLD_P95 ms)"
+            exit 1
+          fi
+
+          if (( $(echo "$ERROR_RATE > $THRESHOLD_ERROR_RATE" | bc -l) )); then
+            echo "❌ FAIL: Error rate ($ERROR_RATE%) supera el umbral ($THRESHOLD_ERROR_RATE%)"
+            exit 1
+          fi
+
+          echo "✅ Todos los umbrales cumplen SLA"
+
+      # ------------------------------------------------
+      # Subir reporte HTML
+      # ------------------------------------------------
+      - name: Upload HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: results/html-report/
