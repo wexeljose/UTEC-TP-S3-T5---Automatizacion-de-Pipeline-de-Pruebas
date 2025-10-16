@@ -32,7 +32,7 @@ jobs:
         run: |
           mkdir -p results
           $JMETER_HOME/bin/jmeter -n \
-            -t test-plans/api-performance.jmx \
+            -t test-plans/UTEC-TP-S3-T5.jmx \
             -l results/results.jtl \
             -e -o results/html-report \
             -Jthreads=50 \
