@@ -39,7 +39,7 @@ jobs:
             -Jrampup=120
 
       # ------------------------------------------------
-      # Chequear umbrales de SLA
+      # Chequear umbrales de SLA (robusto)
       # ------------------------------------------------
       - name: Check SLA Thresholds
         run: |
@@ -47,11 +47,22 @@ jobs:
           THRESHOLD_P95=500       # P95 en ms
           THRESHOLD_ERROR_RATE=1  # Porcentaje
 
-          # Calcular P95
-          P95=$(awk -F',' 'NR>1 {times[NR-1]=$2} END { asort(times); idx=int((NR-1)*0.95); print times[idx] }' $RESULTS_FILE)
+          # Verificar que el archivo existe
+          if [ ! -f "$RESULTS_FILE" ]; then
+            echo "❌ ERROR: El archivo $RESULTS_FILE no existe"
+            exit 1
+          fi
 
-          # Calcular error rate
-          ERROR_RATE=$(awk -F',' 'NR>1 {total++; if($8!="true") errors++} END {print (errors/total)*100}' $RESULTS_FILE)
+          # Calcular P95 (tiempo de respuesta)
+          P95=$(awk -F',' 'NR>1 {times[NR-1]=$2} END { 
+            n = asort(times); 
+            idx = int(n*0.95); 
+            if(idx<1) idx=1; 
+            print times[idx] 
+          }' "$RESULTS_FILE")
+
+          # Calcular error rate (% de muestras que no son 200)
+          ERROR_RATE=$(awk -F',' 'NR>1 {total++; if($4!="200") errors++} END {if(total>0) print (errors/total)*100; else print 0}' "$RESULTS_FILE")
 
           echo "P95 response time: $P95 ms"
           echo "Error rate: $ERROR_RATE %"
