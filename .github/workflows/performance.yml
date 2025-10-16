@@ -81,9 +81,10 @@ jobs:
           echo "✅ Todos los umbrales cumplen SLA"
 
       # ------------------------------------------------
-      # Subir reporte HTML
+      # Subir reporte HTML SIEMPRE (aunque falle SLA)
       # ------------------------------------------------
       - name: Upload HTML Report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: performance-report
